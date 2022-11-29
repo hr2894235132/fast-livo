@@ -185,7 +185,8 @@ namespace lidar_selection {
                 getpatch(img, pc, patch, 1);
                 getpatch(img, pc, patch, 2);
                 PointPtr pt_new(new Point(pt));
-                Vector3d f = cam->cam2world(pc);
+                Vector3d f = cam->cam2world(
+                        pc); // Project from pixels to world coordiantes. Returns a bearing vector of unit length.
                 FeaturePtr ftr_new(new Feature(patch, pc, f, new_frame_->T_f_w_, map_value[i], 0));
                 ftr_new->img = new_frame_->img_pyr_[0];
                 // ftr_new->ImgPyr.resize(5);
@@ -201,11 +202,12 @@ namespace lidar_selection {
 
         double t_b3 = omp_get_wtime() - t0;
 
-        printf("[ Add ] : %d 3D points \n", add);
+//        printf("[ Add ] : %d 3D points \n", add);
         printf("pg.size: %d \n", pg->size());
-        printf("B1. : %.6lf \n", t_b1);
-        printf("B2. : %.6lf \n", t_b2);
-        printf("B3. : %.6lf \n", t_b3);
+//        printf("B1. : %.6lf \n", t_b1);
+//        printf("B2. : %.6lf \n", t_b2);
+//        printf("B3. : %.6lf \n", t_b3);
+        printf("[ VIO ]: Add %d 3D points.\n", add);
     }
 
     void LidarSelector::AddPoint(PointPtr pt_new) {
@@ -377,13 +379,13 @@ namespace lidar_selection {
 
             // Determine the key of hash table
             for (int j = 0; j < 3; j++) {
-                loc_xyz[j] = floor(pt_w[j] / voxel_size); // voxel_size:5 floor:向下取整函数,取不超过x的最大整数
+                loc_xyz[j] = floor(pt_w[j] / voxel_size); // voxel_size:0.5 floor:向下取整函数,取不超过x的最大整数
             }
             VOXEL_KEY position(loc_xyz[0], loc_xyz[1], loc_xyz[2]);
 
             auto iter = sub_feat_map.find(position);
-            if (iter == sub_feat_map.end()) {
-                sub_feat_map[position] = 1.0;
+            if (iter == sub_feat_map.end()) { // 没找到position
+                sub_feat_map[position] = 1.0; // 未查找到，返回一个指向sub_feat_map.end()的指针，则需要初始化
             }
 
             V3D pt_c(new_frame_->w2f(pt_w)); // 世界坐标转换为相机frame
@@ -404,7 +406,7 @@ namespace lidar_selection {
         }
 
 //    imshow("depth_img", depth_img);
-        printf("A1: %.6lf \n", omp_get_wtime() - ts1);
+//        printf("A1: %.6lf \n", omp_get_wtime() - ts1);
 //    printf("A11. calculate pt position: %.6lf \n", t_position);
 //    printf("A12. sub_postion.insert(position): %.6lf \n", t_insert);
 //    printf("A13. generate depth map: %.6lf \n", t_depth);
@@ -441,18 +443,18 @@ namespace lidar_selection {
                                     static_cast<int>(pc[1] / grid_size); // TODO: HOW?
                         grid_num[index] = TYPE_MAP;
                         Vector3d obs_vec(
-                                new_frame_->pos() - pt->pos_); // new_frame_->pos() return该帧在世界坐标系下的位姿 TODO:投影误差？
+                                new_frame_->pos() - pt->pos_); // new_frame_->pos() return该帧在世界坐标系下的位姿 向量做差（3D点误差）
 
-                        float cur_dist = obs_vec.norm(); // TODO:投影误差？
-                        float cur_value = pt->value;
+                        float cur_dist = obs_vec.norm(); // 向量范数，即差值模值
+                        float cur_value = pt->value; // TODO:value?
 
                         if (cur_dist <= map_dist[index]) {
-                            map_dist[index] = cur_dist;
+                            map_dist[index] = cur_dist; // map_dist 初始值 10000
                             voxel_points_[index] = pt;
                         }
 
                         if (cur_value >= map_value[index]) {
-                            map_value[index] = cur_value;
+                            map_value[index] = cur_value; // map_value 初始值 0
                         }
                     }
                 }
@@ -461,7 +463,7 @@ namespace lidar_selection {
 
         double t2 = omp_get_wtime();
 
-        cout << "B. feat_map.find: " << t2 - t1 << endl;
+//        cout << "B. feat_map.find: " << t2 - t1 << endl;
 
         /* C. addSubSparseMap: */
         double t_2, t_3, t_4, t_5;
@@ -482,7 +484,7 @@ namespace lidar_selection {
                 bool depth_continous = false;
                 for (int u = -patch_size_half; u <= patch_size_half; u++) {
                     for (int v = -patch_size_half; v <= patch_size_half; v++) {
-                        if (u == 0 && v == 0) continue;
+                        if (u == 0 && v == 0) continue; // patch中心
 
                         float depth = it[width * (v + int(pc[1])) + u +
                                          int(pc[0])]; // int col = int(px[0]);int row = int(px[1]);it[width*row+col] = depth;
@@ -491,6 +493,9 @@ namespace lidar_selection {
 
                         double delta_dist = abs(pt_cam[2] - depth);
 
+                        // TODO:判断外点条件之一：去除深度不连续的点 keep the lowest-depth points in each grid of 40*40 pixels
+
+                        // TODO:判断外点条件之一：通过检查其深度来检查它们是否遮挡了9×9领域内投影的任何地图点
                         if (delta_dist > 1.5) {
                             depth_continous = true;
                             break;
@@ -500,16 +505,17 @@ namespace lidar_selection {
                 }
                 if (depth_continous) continue;
 
-                t_2 += omp_get_wtime() - t_1;
+//                t_2 += omp_get_wtime() - t_1;
 
                 t_1 = omp_get_wtime();
 
                 FeaturePtr ref_ftr;
 
                 // 计算new_frame_与观察到pt该点的特征中视角最小的一帧
-                if (!pt->getCloseViewObs(new_frame_->pos(), ref_ftr, pc)) continue;
+                // get frame with same point of view AND same pyramid level
+                if (!pt->getCloseViewObs(new_frame_->pos(), ref_ftr, pc)) continue; // <= 60度
 
-                t_3 += omp_get_wtime() - t_1;
+//                t_3 += omp_get_wtime() - t_1;
 
                 float *patch_wrap = new float[patch_size_total * 3];
 
@@ -536,7 +542,7 @@ namespace lidar_selection {
                     Warp_map[ref_ftr->id_] = ot;
                 }
 
-                t_4 += omp_get_wtime() - t_1;
+//                t_4 += omp_get_wtime() - t_1;
 
 
                 t_1 = omp_get_wtime();
@@ -548,7 +554,7 @@ namespace lidar_selection {
 
                 getpatch(img, pc, patch_cache, 0);
 
-                if (ncc_en) {
+                if (ncc_en) { // false
                     double ncc = NCC(patch_wrap, patch_cache, patch_size_total);
                     if (ncc < ncc_thre) continue;
                 }
@@ -570,13 +576,13 @@ namespace lidar_selection {
                 sub_sparse_map->patch.push_back(patch_wrap);
                 // sub_sparse_map->px_cur.push_back(pc);
                 // sub_sparse_map->propa_px_cur.push_back(pc);
-                t_5 += omp_get_wtime() - t_1;
+//                t_5 += omp_get_wtime() - t_1;
             }
         }
         double t3 = omp_get_wtime();
-        cout << "C. addSubSparseMap: " << t3 - t2 << endl;
-        cout << "depthcontinuous: C1 " << t_2 << " C2 " << t_3 << " C3 " << t_4 << " C4 " << t_5 << endl;
-        cout << "[ addFromSparseMap ] " << sub_sparse_map->index.size() << endl;
+//        cout << "C. addSubSparseMap: " << t3 - t2 << endl;
+//        cout << "depthcontinuous: C1 " << t_2 << " C2 " << t_3 << " C3 " << t_4 << " C4 " << t_5 << endl;
+//        cout << "[ addFromSparseMap ] " << sub_sparse_map->index.size() << endl;
         printf("[ VIO ]: choose %d points from sub_sparse_map.\n", int(sub_sparse_map->index.size()));
     }
 
@@ -781,7 +787,7 @@ namespace lidar_selection {
 
                 if (pt == nullptr) continue;
 
-                V3D pf = Rcw * pt->pos_ + Pcw; // pt: world frame; pf: camera frame TODO:这个命名规则？？？
+                V3D pf = Rcw * pt->pos_ + Pcw; // pt: world frame; pf: camera frame
                 pc = cam->world2cam(pf);
                 // if((level==2 && iteration==0) || (level==1 && iteration==0) || level==0)
                 {
@@ -803,7 +809,7 @@ namespace lidar_selection {
                 for (int x = 0; x < patch_size; x++) {
                     uint8_t *img_ptr =
                             (uint8_t *) img.data + (v_ref_i + x * scale - patch_size_half * scale) * width + u_ref_i -
-                            patch_size_half * scale;
+                            patch_size_half * scale; // TODO:?
                     for (int y = 0; y < patch_size; ++y, img_ptr += scale) {
                         // if((level==2 && iteration==0) || (level==1 && iteration==0) || level==0)
                         //{
@@ -829,7 +835,7 @@ namespace lidar_selection {
                         double res =
                                 w_ref_tl * img_ptr[0] + w_ref_tr * img_ptr[scale] + w_ref_bl * img_ptr[scale * width] +
                                 w_ref_br * img_ptr[scale * width + scale] -
-                                P[patch_size_total * level + x * patch_size + y];
+                                P[patch_size_total * level + x * patch_size + y]; // TODO:公式推导
                         z(i * patch_size_total + x * patch_size + y) = res;
                         // float weight = 1.0;
                         // if(iteration > 0)
@@ -847,7 +853,7 @@ namespace lidar_selection {
                 error += patch_error;
             }
 
-            computeH += omp_get_wtime() - t1;
+//            computeH += omp_get_wtime() - t1;
 
             error = error / n_meas_;
 
@@ -864,7 +870,8 @@ namespace lidar_selection {
 
                 auto &&H_sub_T = H_sub.transpose();
                 H_T_H.block<6, 6>(0, 0) = H_sub_T * H_sub;
-                MD(DIM_STATE, DIM_STATE) &&K_1 = (H_T_H + (state->cov / img_point_cov).inverse()).inverse();
+                MD(DIM_STATE, DIM_STATE) &&K_1 = (H_T_H +
+                                                  (state->cov / img_point_cov).inverse()).inverse(); // TODO：视觉协方差
                 auto &&HTz = H_sub_T * z;
                 // K = K_1.block<DIM_STATE,6>(0,0) * H_sub_T;
                 auto vec = (*state_propagat) - (*state);
@@ -875,7 +882,7 @@ namespace lidar_selection {
                 auto &&rot_add = solution.block<3, 1>(0, 0);
                 auto &&t_add = solution.block<3, 1>(3, 0);
 
-                if ((rot_add.norm() * 57.3f < 0.001f) && (t_add.norm() * 100.0f < 0.001f)) {
+                if ((rot_add.norm() * 57.3f < 0.001f) && (t_add.norm() * 100.0f < 0.001f)) { // TODO:EKF结束判断阈值(视觉约束阈值)
                     EKF_end = true;
                 }
             } else {
@@ -883,7 +890,7 @@ namespace lidar_selection {
                 EKF_end = true;
             }
 
-            ekf_time += omp_get_wtime() - t3;
+//            ekf_time += omp_get_wtime() - t3;
 
             if (iteration == NUM_MAX_ITERATIONS || EKF_end) {
                 break;
@@ -896,7 +903,7 @@ namespace lidar_selection {
         M3D Rwi(state.rot_end);
         V3D Pwi(state.pos_end);
         Rcw = Rci * Rwi.transpose();
-        Pcw = -Rci * Rwi.transpose() * Pwi + Pci; // hr: camera to world
+        Pcw = -Rci * Rwi.transpose() * Pwi + Pci; // hr: world to camera
         new_frame_->T_f_w_ = SE3(Rcw, Pcw);
     }
 
@@ -919,7 +926,7 @@ namespace lidar_selection {
 
                 //TODO: condition: distance and view_angle
                 // Step 1: time
-                FeaturePtr last_feature = pt->obs_.back();
+                FeaturePtr last_feature = pt->obs_.back(); // 最新的feature
                 // if(new_frame_->id_ >= last_feature->id_ + 20) add_flag = true;
 
                 // Step 2: delta_pose
@@ -967,7 +974,7 @@ namespace lidar_selection {
             now_error = UpdateState(img, error, level);
         }
         if (now_error < error) {
-            state->cov -= G * state->cov;
+            state->cov -= G * state->cov; // 更新协方差
         }
         updateFrameState(*state); // get: new_frame_->T_f_w_
     }
@@ -1026,7 +1033,7 @@ namespace lidar_selection {
         cv::cvtColor(img, img, CV_BGR2GRAY); // 图像从一个颜色空间转换到另一个颜色空间的转换 opencv default:BGR
 
         new_frame_.reset(new Frame(cam, img.clone()));
-        updateFrameState(*state); // get transformation of camera to world
+        updateFrameState(*state); // get transformation of world to camera ：T_f_w
 
         if (stage_ == STAGE_FIRST_FRAME && pg->size() > 10) {
             new_frame_->setKeyframe(); // hr: find feature points(5 points method)
@@ -1035,12 +1042,12 @@ namespace lidar_selection {
 
         double t1 = omp_get_wtime();
 
-        // TODO:?
+        // 更新稀疏子地图
         addFromSparseMap(img, pg);
 
         double t3 = omp_get_wtime();
 
-        // TODO:?
+        // ADD required 3D points
         addSparseMap(img, pg);
 
         double t4 = omp_get_wtime();
@@ -1051,19 +1058,22 @@ namespace lidar_selection {
 
         double t5 = omp_get_wtime();
 
+        // 根据distance and view_angle,添加新特征
         addObservation(img);
 
         double t2 = omp_get_wtime();
 
-        cout << "addFromSparseMap time:" << t3 - t1 << endl;
-        cout << "addSparseMap time: " << t4 - t3 << endl;
-        cout << "ComputeJ time: " << t5 - t4 << " comp H: " << computeH << " ekf: " << ekf_time << endl;
-        cout << "addObservation time: " << t2 - t5 << endl;
+//        cout << "addFromSparseMap time:" << t3 - t1 << endl;
+//        cout << "addSparseMap time: " << t4 - t3 << endl;
+//        cout << "ComputeJ time: " << t5 - t4 << " comp H: " << computeH << " ekf: " << ekf_time << endl;
+//        cout << "addObservation time: " << t2 - t5 << endl;
 
         frame_cont++;
         ave_total = ave_total * (frame_cont - 1) / frame_cont + (t2 - t1) / frame_cont;
 
-        cout << "total time: " << t2 - t1 << " ave: " << ave_total << endl;
+//        cout << "total time: " << t2 - t1 << " ave: " << ave_total << endl;
+        printf("[ VIO ]: time: addFromSparseMap: %0.6f addSparseMap: %0.6f ComputeJ: %0.6f addObservation: %0.6f total time: %0.6f ave_total: %0.6f.\n",
+               t3 - t1, t4 - t3, t5 - t4, t2 - t5, t2 - t1);
 
         display_keypatch(t2 - t1); // 绘制关键patch
     }

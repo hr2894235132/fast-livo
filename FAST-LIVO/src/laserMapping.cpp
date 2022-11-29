@@ -404,7 +404,7 @@ void lasermap_fov_segment() {
     double delete_begin = omp_get_wtime();
     if (cub_needrm.size() > 0) kdtree_delete_counter = ikdtree.Delete_Point_Boxes(cub_needrm);
     kdtree_delete_time = omp_get_wtime() - delete_begin;
-    printf("Delete time: %0.6f, delete size: %d\n", kdtree_delete_time, kdtree_delete_counter);
+//    printf("Delete time: %0.6f, delete size: %d\n", kdtree_delete_time, kdtree_delete_counter);
     // printf("Delete Box: %d\n",int(cub_needrm.size()));
 }
 
@@ -421,7 +421,9 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg) {
     PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
     p_pre->process(msg, ptr);
     // ROS_INFO("get point cloud at time: %.6f and size: %d", msg->header.stamp.toSec() - 0.1, ptr->points.size());
-    ROS_INFO("get point cloud at time: %.6f and size: %d", msg->header.stamp.toSec(), ptr->points.size());
+//    ROS_INFO("get point cloud at time: %.6f and size: %d", msg->header.stamp.toSec(), ptr->points.size());
+    printf("[ INFO ]: get point cloud at time: %.6f and size: %d.\n", msg->header.stamp.toSec(),
+           int(ptr->points.size()));
     lidar_buffer.push_back(ptr);
     // time_buffer.push_back(msg->header.stamp.toSec() - 0.1);
     // last_timestamp_lidar = msg->header.stamp.toSec() - 0.1;
@@ -437,7 +439,8 @@ void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg) {
         ROS_ERROR("lidar loop back, clear buffer");
         lidar_buffer.clear();
     }
-    ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
+//    ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
+    printf("[ INFO ]: get point cloud at time: %.6f.\n", msg->header.stamp.toSec());
     PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
     p_pre->process(msg, ptr);
     lidar_buffer.push_back(ptr);
@@ -480,11 +483,12 @@ void img_cbk(const sensor_msgs::ImageConstPtr &msg) {
     // cout<<"In Img_cbk"<<endl;
     // if (first_img_time<0 && time_buffer.size()>0) {
     //     first_img_time = msg->header.stamp.toSec() - time_buffer.front();
-    // }-
+    // }
     if (!img_en) {
         return;
     }
-    ROS_INFO("get img at time: %.6f", msg->header.stamp.toSec());
+//    ROS_INFO("get img at time: %.6f", msg->header.stamp.toSec());
+    printf("[ INFO ]: get img at time: %.6f.\n", msg->header.stamp.toSec());
     if (msg->header.stamp.toSec() < last_timestamp_img) {
         ROS_ERROR("img loop back, clear buffer");
         img_buffer.clear();
@@ -535,7 +539,8 @@ bool sync_packages(LidarMeasureGroup &meas) {
         sort(meas.lidar->points.begin(), meas.lidar->points.end(), time_list); // sort by sample timestamp; small to big
         meas.lidar_beg_time = time_buffer.front(); // generate lidar_beg_time // 雷达开始时间
         lidar_end_time =
-                meas.lidar_beg_time + meas.lidar->points.back().curvature / double(1000); // calc lidar scan end time 雷达扫描结束时间
+                meas.lidar_beg_time +
+                meas.lidar->points.back().curvature / double(1000); // calc lidar scan end time 雷达扫描结束时间
         lidar_pushed = true; // flag
     }
 
@@ -1182,14 +1187,16 @@ int main(int argc, char **argv) {
     lidar_selector->fy = cam_fy;
     lidar_selector->cx = cam_cx;
     lidar_selector->cy = cam_cy;
-    lidar_selector->ncc_en = ncc_en; // 0 TODO:?
+    lidar_selector->ncc_en = ncc_en; // 0
     lidar_selector->init();
 
-    p_imu->set_extrinsic(extT, extR); // TODO:lidar to imu
+    p_imu->set_extrinsic(extT, extR); // TODO:lidar to imu??
     p_imu->set_gyr_cov_scale(V3D(gyr_cov_scale, gyr_cov_scale, gyr_cov_scale));
     p_imu->set_acc_cov_scale(V3D(acc_cov_scale, acc_cov_scale, acc_cov_scale));
-    p_imu->set_gyr_bias_cov(V3D(0.00001, 0.00001, 0.00001));
-    p_imu->set_acc_bias_cov(V3D(0.00001, 0.00001, 0.00001));
+//    p_imu->set_gyr_bias_cov(V3D(0.00001, 0.00001, 0.00001));
+//    p_imu->set_acc_bias_cov(V3D(0.00001, 0.00001, 0.00001));
+    p_imu->set_gyr_bias_cov(V3D(0.00003, 0.00003, 0.00003));
+    p_imu->set_acc_bias_cov(V3D(0.01, 0.01, 0.01));
 
 #ifndef USE_IKFOM
     G.setZero();
@@ -1277,8 +1284,9 @@ int main(int argc, char **argv) {
                         false : true; // <0.5 false; >=0.5 true
 
         if (!LidarMeasures.is_lidar_end) {
-            cout << "[ VIO ]: Raw feature num: " << feats_undistort->points.size() << endl;
-            if (first_lidar_time < 10) {
+//            cout << "[ VIO ]: Raw feature num: " << feats_undistort->points.size() << endl;
+            cout << "[ VIO ]: Raw feature num: " << pcl_wait_pub->points.size() << "." << endl;
+            if (first_lidar_time < 10) { // TODO: thread lidar_begin_time
                 continue;
             }
             // cout<<"cur state:"<<state.rot_end<<endl;
@@ -1301,6 +1309,7 @@ int main(int argc, char **argv) {
                 //                         &laserCloudWorld->points[i]);
                 // }
 
+                /* visual main */
                 lidar_selector->detect(LidarMeasures.measures.back().img, pcl_wait_pub); // 传入 世界坐标系点云
                 // int size = lidar_selector->map_cur_frame_.size();
                 int size_sub = lidar_selector->sub_map_cur_frame_.size();
@@ -1394,7 +1403,7 @@ int main(int argc, char **argv) {
 #endif
         feats_down_size = feats_down_body->points.size();
         cout << "[ LIO ]: Raw feature num: " << feats_undistort->points.size() << " downsamp num " << feats_down_size
-             << " Map num: " << featsFromMapNum << endl;
+             << " Map num: " << featsFromMapNum << "." << endl;
 
         /*** ICP and iterated Kalman filter update ***/
         normvec->resize(feats_down_size);
@@ -1457,8 +1466,8 @@ int main(int argc, char **argv) {
 #else
 
         if (img_en) {
-            omp_set_num_threads(MP_PROC_NUM);
-#pragma omp parallel for
+            omp_set_num_threads(MP_PROC_NUM); // 设置线程的默认周期数为MP_PROC_NUM 4
+#pragma omp parallel for  // 并行计算
             for (int i = 0; i < 1; i++) {}
         }
 
@@ -1472,18 +1481,18 @@ int main(int argc, char **argv) {
                 total_residual = 0.0;
 
                 /** closest surface search and residual computation **/
-                // #ifdef MP_EN
-                //     omp_set_num_threads(MP_PROC_NUM);
-                //     #pragma omp parallel for
-                // #endif
-                normvec->resize(feats_down_size);
+#ifdef MP_EN
+                omp_set_num_threads(MP_PROC_NUM);
+#pragma omp parallel for
+#endif
+//                normvec->resize(feats_down_size);
                 for (int i = 0; i < feats_down_size; i++) {
                     PointType &point_body = feats_down_body->points[i];
                     PointType &point_world = feats_down_world->points[i];
                     V3D p_body(point_body.x, point_body.y, point_body.z);
                     /* transform to world frame */
                     pointBodyToWorld(&point_body, &point_world);
-                    vector<float> pointSearchSqDis(NUM_MATCH_POINTS);
+                    vector<float> pointSearchSqDis(NUM_MATCH_POINTS); // #define 5
 #ifdef USE_ikdtree
                     auto &points_near = Nearest_Points[i];
 #else
@@ -1523,21 +1532,23 @@ int main(int argc, char **argv) {
                     // }
                     if (!point_selected_surf[i] || points_near.size() < NUM_MATCH_POINTS) continue;
 
-                    VF(4) pabcd;
+                    VF(4) pabcd; // Matrix<float, (4), 1>
                     point_selected_surf[i] = false;
                     if (esti_plane(pabcd, points_near, 0.1f)) //(planeValid)
                     {
                         float pd2 = pabcd(0) * point_world.x + pabcd(1) * point_world.y + pabcd(2) * point_world.z +
                                     pabcd(3);
-                        float s = 1 - 0.9 * fabs(pd2) / sqrt(p_body.norm());
+                        float s = 1 - 0.9 * fabs(pd2) / sqrt(p_body.norm()); // fabs(pd2) / sqrt(p_body.norm()):点到平面距离公式
 
-                        if (s > 0.9) {
+
+                        normvec->resize(feats_down_size);
+                        if (s > 0.9) { // TODO: thread 点到平面距离 < 1/9
                             point_selected_surf[i] = true;
-                            normvec->points[i].x = pabcd(0);
+                            normvec->points[i].x = pabcd(0); // hr: save normvec
                             normvec->points[i].y = pabcd(1);
                             normvec->points[i].z = pabcd(2);
                             normvec->points[i].intensity = pd2;
-                            res_last[i] = abs(pd2);
+                            res_last[i] = abs(pd2); // hr: save residuals
                         }
                     }
                 }
@@ -1546,7 +1557,7 @@ int main(int argc, char **argv) {
                 laserCloudOri->resize(feats_down_size);
                 corr_normvect->reserve(feats_down_size);
                 for (int i = 0; i < feats_down_size; i++) {
-                    if (point_selected_surf[i] && (res_last[i] <= 2.0)) {
+                    if (point_selected_surf[i] && (res_last[i] <= 2.0)) { // TODO:thread residuals <= 2.
                         laserCloudOri->points[effct_feat_num] = feats_down_body->points[i];
                         corr_normvect->points[effct_feat_num] = normvec->points[i];
                         total_residual += res_last[i];
@@ -1555,9 +1566,14 @@ int main(int argc, char **argv) {
                 }
 
                 res_mean_last = total_residual / effct_feat_num;
-                // cout << "[ mapping ]: Effective feature num: "<<effct_feat_num<<" res_mean_last "<<res_mean_last<<endl;
-                match_time += omp_get_wtime() - match_start;
-                solve_start = omp_get_wtime();
+                // debug:
+                cout << "[ mapping ]: Effective feature num: " << effct_feat_num << " res_mean_last " << res_mean_last
+                     << endl;
+                printf("[ LIO ]: time: fov_check: %0.6f fov_check and readd: %0.6f match: %0.6f solve: %0.6f  ICP: %0.6f  map incre: %0.6f total: %0.6f icp: %0.6f construct H: %0.6f.\n",
+                       fov_check_time, t1 - t0, aver_time_match, aver_time_solve, t3 - t1, t5 - t3, aver_time_consu,
+                       aver_time_icp, aver_time_const_H_time);
+                match_time += omp_get_wtime() - match_start; // 匹配结束
+                solve_start = omp_get_wtime(); // 迭代求解开始
 
                 /*** Computation of Measuremnt Jacobian matrix H and measurents vector ***/
                 MatrixXd Hsub(effct_feat_num, 6);
@@ -1568,7 +1584,7 @@ int main(int argc, char **argv) {
                     V3D point_this(laser_p.x, laser_p.y, laser_p.z);
                     point_this += Lidar_offset_to_IMU;
                     M3D point_crossmat;
-                    point_crossmat << SKEW_SYM_MATRX(point_this);
+                    point_crossmat << SKEW_SYM_MATRX(point_this); // 斜对称矩阵
 
                     /*** get the normal vector of closest surface/corner ***/
                     const PointType &norm_p = corr_normvect->points[i];
@@ -1609,13 +1625,14 @@ int main(int argc, char **argv) {
                     // state += solution;
                     // state.cov = (MatrixXd::Identity(DIM_STATE, DIM_STATE) - K_init * H_init) * state.cov;
 
-                    state.resetpose();
+                    state.resetpose(); // R：单位阵；p,v:Zero3d
                     EKF_stop_flg = true;
                 } else {
                     auto &&Hsub_T = Hsub.transpose();
                     auto &&HTz = Hsub_T * meas_vec;
                     H_T_H.block<6, 6>(0, 0) = Hsub_T * Hsub;
                     // EigenSolver<Matrix<double, 6, 6>> es(H_T_H.block<6,6>(0,0));
+                    // TODO:雷达协方差
                     MD(DIM_STATE, DIM_STATE) &&K_1 = \
                             (H_T_H + (state.cov / LASER_POINT_COV).inverse()).inverse();
                     G.block<DIM_STATE, 6>(0, 0) = K_1.block<DIM_STATE, 6>(0, 0) * H_T_H.block<6, 6>(0, 0);
@@ -1623,7 +1640,7 @@ int main(int argc, char **argv) {
                     solution = K_1.block<DIM_STATE, 6>(0, 0) * HTz + vec -
                                G.block<DIM_STATE, 6>(0, 0) * vec.block<6, 1>(0, 0);
 
-                    int minRow, minCol;
+//                    int minRow, minCol;
                     if (0)//if(V.minCoeff(&minRow, &minCol) < 1.0f)
                     {
                         VD(6) V = H_T_H.block<6, 6>(0, 0).eigenvalues().real();
@@ -1637,12 +1654,12 @@ int main(int argc, char **argv) {
                     rot_add = solution.block<3, 1>(0, 0);
                     t_add = solution.block<3, 1>(3, 0);
 
-                    if ((rot_add.norm() * 57.3 < 0.01) && (t_add.norm() * 100 < 0.015)) {
+                    if ((rot_add.norm() * 57.3 < 0.01) && (t_add.norm() * 100 < 0.015)) { // TODO: thread EKF收敛
                         flg_EKF_converged = true;
                     }
 
-                    deltaR = rot_add.norm() * 57.3;
-                    deltaT = t_add.norm() * 100;
+                    deltaR = rot_add.norm() * 57.3; // 弧度 to 角度
+                    deltaT = t_add.norm() * 100; // m to cm
                 }
                 euler_cur = RotMtoEuler(state.rot_end);
 
@@ -1666,7 +1683,7 @@ int main(int argc, char **argv) {
                         geoQuat = tf::createQuaternionMsgFromRollPitchYaw
                                 (euler_cur(0), euler_cur(1), euler_cur(2));
 
-                        VD(DIM_STATE) K_sum = K.rowwise().sum();
+                        VD(DIM_STATE) K_sum = K.rowwise().sum(); // Matrix<double, ((18)), 1>
                         VD(DIM_STATE) P_diag = state.cov.diagonal();
                         // cout<<"K: "<<K_sum.transpose()<<endl;
                         // cout<<"P: "<<P_diag.transpose()<<endl;
@@ -1680,7 +1697,8 @@ int main(int argc, char **argv) {
             }
         }
 
-        // cout<<"[ mapping ]: iteration count: "<<iterCount+1<<endl;
+        // debug
+        cout << "[ mapping ]: iteration count: " << iterCount + 1 << endl;
 #endif
         // SaveTrajTUM(LidarMeasures.lidar_beg_time, state.rot_end, state.pos_end);
         double t_update_end = omp_get_wtime();

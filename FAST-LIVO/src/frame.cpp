@@ -72,7 +72,7 @@ namespace lidar_selection {
                 if (key_pts_[i]->point == nullptr)
                     key_pts_[i] = nullptr;
         std::for_each(fts_.begin(), fts_.end(),
-                      [&](FeaturePtr ftr) { if (ftr->point != nullptr) checkKeyPoints(ftr); });
+                      [&](FeaturePtr ftr) { if (ftr->point != nullptr) checkKeyPoints(ftr); }); // hr: fts_:List of features in the image
     }
 
     // 找五点法中的5个点

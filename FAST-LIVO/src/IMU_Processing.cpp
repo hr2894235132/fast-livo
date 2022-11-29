@@ -10,14 +10,23 @@ ImuProcess::ImuProcess()
 #ifdef USE_IKFOM
     Q = process_noise_cov();
 #endif
-    cov_acc = V3D(0.1, 0.1, 0.1);
+    //TODO: 22-11-28 调整IMU的协方差
+    cov_acc       = V3D(1, 1, 1);
+    cov_gyr       = V3D(1., 1., 1.);
+    cov_acc_scale = V3D(1, 1, 1);
+    cov_gyr_scale = V3D(1, 1, 1);
+    cov_bias_gyr  = V3D(0.00003, 0.00003, 0.00003);
+    cov_bias_acc  = V3D(0.01, 0.01, 0.01);
+    mean_acc      = V3D(0, 0, -1.0);
+    mean_gyr      = V3D(0, 0, 0);
+    /*cov_acc = V3D(0.1, 0.1, 0.1);
     cov_gyr = V3D(0.1, 0.1, 0.1);
     cov_acc_scale = V3D(1, 1, 1);
     cov_gyr_scale = V3D(1, 1, 1);
     cov_bias_gyr = V3D(0.1, 0.1, 0.1);
     cov_bias_acc = V3D(0.1, 0.1, 0.1);
     mean_acc = V3D(0, 0, -1.0);
-    mean_gyr = V3D(0, 0, 0);
+    mean_gyr = V3D(0, 0, 0);*/
     angvel_last = Zero3d;
     Lid_offset_to_IMU = Zero3d;
     Lid_rot_to_IMU = Eye3d;

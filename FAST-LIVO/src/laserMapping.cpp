@@ -719,7 +719,7 @@ publish_frame_world_rgb(const ros::Publisher &pubLaserCloudFullRes, lidar_select
                 // cv::Mat img_cur = lidar_selector->new_frame_->img();
                 cv::Mat img_rgb = lidar_selector->img_rgb;
                 V3F pixel = lidar_selector->getpixel(img_rgb, pc);
-                pointRGB.r = pixel[2];
+                pointRGB.r = pixel[2]; // rgb信息
                 pointRGB.g = pixel[1];
                 pointRGB.b = pixel[0];
                 laserCloudWorldRGB->push_back(pointRGB);
@@ -745,7 +745,7 @@ publish_frame_world_rgb(const ros::Publisher &pubLaserCloudFullRes, lidar_select
         laserCloudmsg.header.stamp = ros::Time::now();//.fromSec(last_timestamp_lidar);
         laserCloudmsg.header.frame_id = "camera_init";
         pubLaserCloudFullRes.publish(laserCloudmsg);
-        publish_count -= PUBFRAME_PERIOD; // publish_count以imu的发布为准
+        publish_count -= PUBFRAME_PERIOD; // publish_count以imu的发布为准 PUBFRAME_PERIOD：20
         // pcl_wait_pub->clear();
     }
     // mtx_buffer_pointcloud.unlock();
@@ -1286,7 +1286,7 @@ int main(int argc, char **argv) {
         if (!LidarMeasures.is_lidar_end) {
 //            cout << "[ VIO ]: Raw feature num: " << feats_undistort->points.size() << endl;
             cout << "[ VIO ]: Raw feature num: " << pcl_wait_pub->points.size() << "." << endl;
-            if (first_lidar_time < 10) { // TODO: thread lidar_begin_time
+            if (first_lidar_time < 10) { // TODO: threshold lidar_begin_time
                 continue;
             }
             // cout<<"cur state:"<<state.rot_end<<endl;
@@ -1343,8 +1343,8 @@ int main(int argc, char **argv) {
                 out_msg.image = img_rgb;
                 img_pub.publish(out_msg.toImageMsg());
 
-                publish_frame_world_rgb(pubLaserCloudFullResRgb, lidar_selector);
-                publish_visual_world_sub_map(pubSubVisualCloud);
+                publish_frame_world_rgb(pubLaserCloudFullResRgb, lidar_selector); // 发布带有rgb信息的点云信息
+                publish_visual_world_sub_map(pubSubVisualCloud); // 发布sub_map_cur_frame_point
 
                 // *map_cur_frame_point = *pcl_wait_pub;
                 // mtx_buffer_pointcloud.unlock();
@@ -1541,8 +1541,8 @@ int main(int argc, char **argv) {
                         float s = 1 - 0.9 * fabs(pd2) / sqrt(p_body.norm()); // fabs(pd2) / sqrt(p_body.norm()):点到平面距离公式
 
 
-                        normvec->resize(feats_down_size);
-                        if (s > 0.9) { // TODO: thread 点到平面距离 < 1/9
+//                        normvec->resize(feats_down_size);
+                        if (s > 0.9) { // TODO: threshold 点到平面距离 < 1/9
                             point_selected_surf[i] = true;
                             normvec->points[i].x = pabcd(0); // hr: save normvec
                             normvec->points[i].y = pabcd(1);
@@ -1557,7 +1557,7 @@ int main(int argc, char **argv) {
                 laserCloudOri->resize(feats_down_size);
                 corr_normvect->reserve(feats_down_size);
                 for (int i = 0; i < feats_down_size; i++) {
-                    if (point_selected_surf[i] && (res_last[i] <= 2.0)) { // TODO:thread residuals <= 2.
+                    if (point_selected_surf[i] && (res_last[i] <= 2.0)) { // TODO:threshold residuals <= 2.
                         laserCloudOri->points[effct_feat_num] = feats_down_body->points[i];
                         corr_normvect->points[effct_feat_num] = normvec->points[i];
                         total_residual += res_last[i];
@@ -1654,7 +1654,7 @@ int main(int argc, char **argv) {
                     rot_add = solution.block<3, 1>(0, 0);
                     t_add = solution.block<3, 1>(3, 0);
 
-                    if ((rot_add.norm() * 57.3 < 0.01) && (t_add.norm() * 100 < 0.015)) { // TODO: thread EKF收敛
+                    if ((rot_add.norm() * 57.3 < 0.01) && (t_add.norm() * 100 < 0.015)) { // TODO: threshold EKF收敛
                         flg_EKF_converged = true;
                     }
 

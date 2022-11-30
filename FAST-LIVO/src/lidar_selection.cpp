@@ -320,7 +320,7 @@ namespace lidar_selection {
         int search_level = 0;
         double D = A_cur_ref.determinant(); // 行列式（几何意义） D是仿射变化后四边形的面积
 
-        while (D > 3.0 && search_level < max_level) { // hr: make sure D <= 3
+        while (D > 3.0 && search_level < max_level) { // hr: make sure D <= 3 && search_level < 2
             search_level += 1;
             D *= 0.25;
         }
@@ -400,7 +400,7 @@ namespace lidar_selection {
                     float depth = pt_c[2];
                     int col = int(px[0]);
                     int row = int(px[1]);
-                    it[width * row + col] = depth;
+                    it[width * row + col] = depth; // TODO：idx是如何定义的
                 }
             }
         }
@@ -481,6 +481,7 @@ namespace lidar_selection {
                 V2D pc(new_frame_->w2c(pt->pos_)); // world frame to camera pixel coordinates（2d）
                 V3D pt_cam(new_frame_->w2f(pt->pos_)); // world frame to camera frame
 
+                // 判断点深度连续性
                 bool depth_continous = false;
                 for (int u = -patch_size_half; u <= patch_size_half; u++) {
                     for (int v = -patch_size_half; v <= patch_size_half; v++) {
@@ -511,8 +512,8 @@ namespace lidar_selection {
 
                 FeaturePtr ref_ftr;
 
-                // 计算new_frame_与观察到pt该点的特征中视角最小的一帧
                 // get frame with same point of view AND same pyramid level
+                // 找到与当前图像的观察角度最接近的点作为参考
                 if (!pt->getCloseViewObs(new_frame_->pos(), ref_ftr, pc)) continue; // <= 60度
 
 //                t_3 += omp_get_wtime() - t_1;
@@ -527,7 +528,7 @@ namespace lidar_selection {
                 Matrix2d A_cur_ref_zero;
 
                 auto iter_warp = Warp_map.find(ref_ftr->id_);
-                if (iter_warp != Warp_map.end()) {
+                if (iter_warp != Warp_map.end()) { // find sucessfully
                     search_level = iter_warp->second->search_level;
                     A_cur_ref_zero = iter_warp->second->A_cur_ref;
                 } else {
@@ -536,10 +537,10 @@ namespace lidar_selection {
                                         new_frame_->T_f_w_ * ref_ftr->T_f_w_.inverse(), 0, 0, patch_size_half,
                                         A_cur_ref_zero);
 
-                    search_level = getBestSearchLevel(A_cur_ref_zero, 2); //找到尺度相近的层
+                    search_level = getBestSearchLevel(A_cur_ref_zero, 2); // 找到尺度相近的层
 
                     Warp *ot = new Warp(search_level, A_cur_ref_zero);
-                    Warp_map[ref_ftr->id_] = ot;
+                    Warp_map[ref_ftr->id_] = ot; // 更新warp_map
                 }
 
 //                t_4 += omp_get_wtime() - t_1;
@@ -549,7 +550,7 @@ namespace lidar_selection {
 
                 for (int pyramid_level = 0; pyramid_level <= 0; pyramid_level++) { // pyramid_level == 0
                     warpAffine(A_cur_ref_zero, ref_ftr->img, ref_ftr->px, ref_ftr->level, search_level, pyramid_level,
-                               patch_size_half, patch_wrap); // 实施仿射变换
+                               patch_size_half, patch_wrap); // 只对第0层实施仿射变换，可以得到亚像素级别的精度
                 }
 
                 getpatch(img, pc, patch_cache, 0);
@@ -561,9 +562,9 @@ namespace lidar_selection {
 
                 float error = 0.0;
                 for (int ind = 0; ind < patch_size_total; ind++) {
-                    error += (patch_wrap[ind] - patch_cache[ind]) * (patch_wrap[ind] - patch_cache[ind]);
+                    error += (patch_wrap[ind] - patch_cache[ind]) * (patch_wrap[ind] - patch_cache[ind]); // (ref-current)^2
                 }
-                if (error > outlier_threshold * patch_size_total) continue;
+                if (error > outlier_threshold * patch_size_total) continue; // TODO：阈值：外点去除？
 
                 sub_map_cur_frame_.push_back(pt);
 
@@ -970,7 +971,7 @@ namespace lidar_selection {
         float error = 1e10;
         float now_error = error;
 
-        for (int level = 2; level >= 0; level--) {
+        for (int level = 2; level >= 0; level--) { // hr: a coarse-to-fine manner 2->0:粗糙->精细
             now_error = UpdateState(img, error, level);
         }
         if (now_error < error) {

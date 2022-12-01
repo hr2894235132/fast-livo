@@ -827,7 +827,7 @@ void ImuProcess::Process2(LidarMeasureGroup &lidar_meas, StatesGroup &stat, Poin
                     "IMU Initials: Gravity: %.4f %.4f %.4f %.4f; state.bias_g: %.4f %.4f %.4f; acc covarience: %.8f %.8f %.8f; gry covarience: %.8f %.8f %.8f", \
                stat.gravity[0], stat.gravity[1], stat.gravity[2], mean_acc.norm(), cov_acc_scale[0], cov_acc_scale[1],
                     cov_acc_scale[2], cov_acc[0], cov_acc[1], cov_acc[2], cov_gyr[0], cov_gyr[1], cov_gyr[2]);
-            cov_acc = cov_acc.cwiseProduct(cov_acc_scale);
+            cov_acc = cov_acc.cwiseProduct(cov_acc_scale); // 两个矩阵各元素相乘
             cov_gyr = cov_gyr.cwiseProduct(cov_gyr_scale);
 
             // cov_acc = Eye3d * cov_acc_scale;
